@@ -1,6 +1,6 @@
 import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { catchError, delay, EMPTY, exhaustMap, Observable, of, shareReplay, timer } from 'rxjs';
+import { catchError, delay, distinctUntilChanged, EMPTY, exhaustMap, fromEvent, map, Observable, of, shareReplay, startWith, switchMap, timer } from 'rxjs';
 import { eASICModel } from 'src/models/enum/eASICModel';
 import { ISystemInfo } from 'src/models/ISystemInfo';
 
@@ -20,11 +20,24 @@ export class SystemService {
   public readonly info$: Observable<ISystemInfo>;
 
   private static readonly INFO_POLL_INTERVAL_MS = 3000;
+  private static readonly INFO_POLL_INTERVAL_HIDDEN_MS = 60000;
 
   constructor(
     private httpClient: HttpClient
   ) {
-    this.info$ = timer(0, SystemService.INFO_POLL_INTERVAL_MS).pipe(
+    // Poll slowly while the tab is in the background so a forgotten tab
+    // doesn't keep the device busy. Becoming visible restarts the timer,
+    // which polls immediately.
+    const visible$ = fromEvent(document, 'visibilitychange').pipe(
+      startWith(null),
+      map(() => document.visibilityState === 'visible'),
+      distinctUntilChanged()
+    );
+
+    this.info$ = visible$.pipe(
+      switchMap(visible => timer(0, visible
+        ? SystemService.INFO_POLL_INTERVAL_MS
+        : SystemService.INFO_POLL_INTERVAL_HIDDEN_MS)),
       // Skip ticks while a request is still running instead of stacking them
       // up, and keep polling after a failed request
       exhaustMap(() => this.getInfo().pipe(catchError(() => EMPTY))),
