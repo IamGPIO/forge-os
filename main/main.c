@@ -183,26 +183,23 @@ void app_main(void)
         strncpy(GLOBAL_STATE.SYSTEM_MODULE.wifi_status, "Connected!", 20);
     } else if (result_bits & WIFI_FAIL_BIT) {
         ESP_LOGE(TAG, "Failed to connect to SSID: %s", wifi_ssid);
-
         strncpy(GLOBAL_STATE.SYSTEM_MODULE.wifi_status, "Failed to connect", 20);
-        // User might be trying to configure with AP, just chill here
-        ESP_LOGI(TAG, "Finished, waiting for user input.");
-        while (1) {
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
         strncpy(GLOBAL_STATE.SYSTEM_MODULE.wifi_status, "unexpected error", 20);
+    }
+
+    free(wifi_ssid);
+    free(wifi_pass);
+    free(hostname);
+
+    if (!(result_bits & WIFI_CONNECTED_BIT)) {
         // User might be trying to configure with AP, just chill here
         ESP_LOGI(TAG, "Finished, waiting for user input.");
         while (1) {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
-
-    free(wifi_ssid);
-    free(wifi_pass);
-    free(hostname);
 
     GLOBAL_STATE.new_stratum_version_rolling_msg = false;
 
