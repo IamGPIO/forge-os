@@ -117,7 +117,16 @@ export class SystemService {
           stratumTLS: 0,
           fallbackStratumTLS: 0,
           stratumCert: 'x',
-          fallbackStratumCert: 'x'
+          fallbackStratumCert: 'x',
+          stratumProtocol: 0,
+          fallbackStratumProtocol: 0,
+          stratumV2ChannelType: 2,
+          fallbackStratumV2ChannelType: 2,
+          stratumV2AuthorityPubkey: '',
+          fallbackStratumV2AuthorityPubkey: '',
+          stratumV2RequireAuth: false,
+          fallbackStratumV2RequireAuth: false,
+          poolsUnavailable: false
         }
       ).pipe(delay(1000));
     }

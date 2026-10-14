@@ -86,7 +86,18 @@ typedef struct
     uint16_t fallback_pool_tls;
     char * pool_cert;
     char * fallback_pool_cert;
+    uint16_t pool_protocol;
+    uint16_t fallback_pool_protocol;
+    uint16_t pool_sv2_channel_type;
+    uint16_t fallback_pool_sv2_channel_type;
+    char * pool_sv2_authority_pubkey;
+    char * fallback_pool_sv2_authority_pubkey;
+    bool pool_sv2_require_auth;
+    bool fallback_pool_sv2_require_auth;
     bool is_using_fallback;
+    // Set by the stratum task when no configured pool answers; the power
+    // management task powers the ASIC down while it is set.
+    volatile bool pools_unavailable;
     uint16_t pool_mode;
     uint16_t pool_balance;
     char pool_connection_info[64];
@@ -133,6 +144,8 @@ typedef struct
     uint64_t extranonce_2;
     uint64_t shares_accepted;
     uint64_t shares_rejected;
+    // Connection attempts in a row that ended without receiving work.
+    int connect_failures;
     CoinbaseInfo coinbase;
 } StratumPoolState;
 
@@ -189,6 +202,9 @@ typedef struct
     portMUX_TYPE stratum_mux;
 
     bool ASIC_initalized;
+    // Set by ASIC_result_task while it is not reading from the UART, so the
+    // ASIC can be re-initialised without that task eating the chip's replies.
+    volatile bool asic_result_parked;
     bool psram_is_available;
 } GlobalState;
 

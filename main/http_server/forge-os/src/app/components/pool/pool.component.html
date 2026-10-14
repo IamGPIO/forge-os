@@ -12,6 +12,10 @@
                     </div>
                 </div>
 
+                <p-message *ngIf="form.errors?.['sv2DualPool']" severity="warn" styleClass="w-full mb-3"
+                    text="Stratum V2 is not supported in Dual Pool mode. Set both pools to Stratum V1 or use Fallback mode.">
+                </p-message>
+
                 <div class="field grid p-fluid" *ngIf="form.get('poolMode')?.value === 1">
                     <label htmlFor="poolBalance" class="col-12 mb-2 md:col-2 md:mb-0">Pool Balance:</label>
                     <div class="col-12 md:col-10">
@@ -24,6 +28,18 @@
 
                 <p-tabView>
                     <p-tabPanel header="Main Pool" leftIcon="pi pi-server">
+                        <div class="field grid p-fluid">
+                            <label htmlFor="stratumProtocol" class="col-12 mb-2 md:col-2 md:mb-0">Protocol:</label>
+                            <div class="col-12 md:col-10">
+                                <p-dropdown id="stratumProtocol" [options]="protocolOptions" formControlName="stratumProtocol"
+                                            optionLabel="label" optionValue="value" optionDisabled="disabled"
+                                            placeholder="Select Protocol">
+                                </p-dropdown>
+                                <div>
+                                    <small>Stratum V2 encrypts the connection and can verify the pool's identity. Not all pools support it.</small>
+                                </div>
+                            </div>
+                        </div>
                         <div class="field grid p-fluid">
                             <label htmlFor="stratumURL" class="col-12 mb-2 md:col-2 md:mb-0">Stratum Host:</label>
                             <div class="col-12 md:col-10">
@@ -56,6 +72,7 @@
                                        placeholder="Enter stratum password" />
                             </div>
                         </div>
+                        <ng-container *ngIf="form.get('stratumProtocol')?.value !== 1">
                         <div class="field grid p-fluid">
                             <label htmlFor="stratumTLS" class="col-12 mb-2 md:col-2 md:mb-0">TLS:</label>
                             <div class="col-12 md:col-10">
@@ -72,9 +89,56 @@
                                           placeholder="Paste PEM certificate here"></textarea>
                             </div>
                         </div>
+                        </ng-container>
+                        <ng-container *ngIf="form.get('stratumProtocol')?.value === 1">
+                            <div class="field grid p-fluid">
+                                <label htmlFor="stratumV2ChannelType" class="col-12 mb-2 md:col-2 md:mb-0">Channel Type:</label>
+                                <div class="col-12 md:col-10">
+                                    <p-dropdown id="stratumV2ChannelType" [options]="sv2ChannelTypes" formControlName="stratumV2ChannelType"
+                                                optionLabel="label" optionValue="value" placeholder="Select Channel Type">
+                                    </p-dropdown>
+                                    <div>
+                                        <small *ngIf="form.get('stratumV2ChannelType')?.value === 2">Recommended for external pools. The pool sends the coinbase template, so the payout shown on the dashboard can be checked.</small>
+                                        <small *ngIf="form.get('stratumV2ChannelType')?.value === 1">Only use with a self-hosted SV2 node or job declarator client.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field grid p-fluid">
+                                <label htmlFor="stratumV2AuthorityPubkey" class="col-12 mb-2 md:col-2 md:mb-0">Authority Pubkey:</label>
+                                <div class="col-12 md:col-10">
+                                    <input pInputText id="stratumV2AuthorityPubkey" formControlName="stratumV2AuthorityPubkey" type="text"
+                                           placeholder="Pool's SV2 authority public key (optional)" />
+                                    <div>
+                                        <small *ngIf="!form.get('stratumV2AuthorityPubkey')?.errors">Published by the pool. Used to verify you are connected to the real pool; leave empty to skip verification.</small>
+                                        <small *ngIf="form.get('stratumV2AuthorityPubkey')?.errors?.['pattern']" class="p-error">Not a valid Base58 key.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field grid">
+                                <div class="col-12 md:col-10 md:col-offset-2">
+                                    <div class="field-checkbox mb-0">
+                                        <p-checkbox formControlName="stratumV2RequireAuth" inputId="stratumV2RequireAuth" [binary]="true"></p-checkbox>
+                                        <label for="stratumV2RequireAuth">Require authentication (refuse to connect if the pool's identity can't be verified)</label>
+                                    </div>
+                                    <small *ngIf="form.errors?.['sv2AuthKeyMissing']" class="p-error">An authority pubkey is required when authentication is required.</small>
+                                </div>
+                            </div>
+                        </ng-container>
                     </p-tabPanel>
 
                     <p-tabPanel header="Secondary / Fallback Pool" leftIcon="pi pi-shield">
+                        <div class="field grid p-fluid">
+                            <label htmlFor="fallbackStratumProtocol" class="col-12 mb-2 md:col-2 md:mb-0">Protocol:</label>
+                            <div class="col-12 md:col-10">
+                                <p-dropdown id="fallbackStratumProtocol" [options]="protocolOptions" formControlName="fallbackStratumProtocol"
+                                            optionLabel="label" optionValue="value" optionDisabled="disabled"
+                                            placeholder="Select Protocol">
+                                </p-dropdown>
+                                <div>
+                                    <small>Stratum V2 encrypts the connection and can verify the pool's identity. Not all pools support it.</small>
+                                </div>
+                            </div>
+                        </div>
                         <div class="field grid p-fluid">
                             <label htmlFor="fallbackStratumURL" class="col-12 mb-2 md:col-2 md:mb-0">Stratum Host:</label>
                             <div class="col-12 md:col-10">
@@ -107,6 +171,7 @@
                                        placeholder="Enter fallback stratum password" />
                             </div>
                         </div>
+                        <ng-container *ngIf="form.get('fallbackStratumProtocol')?.value !== 1">
                         <div class="field grid p-fluid">
                             <label htmlFor="fallbackStratumTLS" class="col-12 mb-2 md:col-2 md:mb-0">TLS:</label>
                             <div class="col-12 md:col-10">
@@ -123,6 +188,41 @@
                                           placeholder="Paste PEM certificate here"></textarea>
                             </div>
                         </div>
+                        </ng-container>
+                        <ng-container *ngIf="form.get('fallbackStratumProtocol')?.value === 1">
+                            <div class="field grid p-fluid">
+                                <label htmlFor="fallbackStratumV2ChannelType" class="col-12 mb-2 md:col-2 md:mb-0">Channel Type:</label>
+                                <div class="col-12 md:col-10">
+                                    <p-dropdown id="fallbackStratumV2ChannelType" [options]="sv2ChannelTypes" formControlName="fallbackStratumV2ChannelType"
+                                                optionLabel="label" optionValue="value" placeholder="Select Channel Type">
+                                    </p-dropdown>
+                                    <div>
+                                        <small *ngIf="form.get('fallbackStratumV2ChannelType')?.value === 2">Recommended for external pools. The pool sends the coinbase template, so the payout shown on the dashboard can be checked.</small>
+                                        <small *ngIf="form.get('fallbackStratumV2ChannelType')?.value === 1">Only use with a self-hosted SV2 node or job declarator client.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field grid p-fluid">
+                                <label htmlFor="fallbackStratumV2AuthorityPubkey" class="col-12 mb-2 md:col-2 md:mb-0">Authority Pubkey:</label>
+                                <div class="col-12 md:col-10">
+                                    <input pInputText id="fallbackStratumV2AuthorityPubkey" formControlName="fallbackStratumV2AuthorityPubkey" type="text"
+                                           placeholder="Pool's SV2 authority public key (optional)" />
+                                    <div>
+                                        <small *ngIf="!form.get('fallbackStratumV2AuthorityPubkey')?.errors">Published by the pool. Used to verify you are connected to the real pool; leave empty to skip verification.</small>
+                                        <small *ngIf="form.get('fallbackStratumV2AuthorityPubkey')?.errors?.['pattern']" class="p-error">Not a valid Base58 key.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field grid">
+                                <div class="col-12 md:col-10 md:col-offset-2">
+                                    <div class="field-checkbox mb-0">
+                                        <p-checkbox formControlName="fallbackStratumV2RequireAuth" inputId="fallbackStratumV2RequireAuth" [binary]="true"></p-checkbox>
+                                        <label for="fallbackStratumV2RequireAuth">Require authentication (refuse to connect if the pool's identity can't be verified)</label>
+                                    </div>
+                                    <small *ngIf="form.errors?.['fallbackSv2AuthKeyMissing']" class="p-error">An authority pubkey is required when authentication is required.</small>
+                                </div>
+                            </div>
+                        </ng-container>
                     </p-tabPanel>
                 </p-tabView>
 

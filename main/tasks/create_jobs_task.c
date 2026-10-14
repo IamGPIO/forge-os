@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "mining.h"
+#include "utils.h"
 #include "string.h"
 
 #include "asic.h"
@@ -59,8 +60,18 @@ void create_jobs_task(void *pvParameters)
         }
 
         uint64_t extranonce_2 = 0;
+        bool fixed_job_sent = false;
         while (queue_count(&GLOBAL_STATE->stratum_queue) < 1 && GLOBAL_STATE->abandon_work == 0)
         {
+            // An SV2 standard channel job has a fixed merkle root, so there is
+            // nothing to roll: send it once and let the ASIC's version rolling
+            // cover the nonce space until the pool sends new work.
+            if (fixed_job_sent)
+            {
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                continue;
+            }
+
             if (should_generate_more_work(GLOBAL_STATE))
             {
                 // Snapshot the extranonce under the lock rather than handing
@@ -73,6 +84,21 @@ void create_jobs_task(void *pvParameters)
                 int extranonce_2_len = GLOBAL_STATE->extranonce_2_len;
                 uint32_t version_mask = GLOBAL_STATE->version_mask;
                 pthread_mutex_unlock(&GLOBAL_STATE->stratum_work_lock);
+
+                // SV2 always negotiates BIP320 rolling and can switch it off per
+                // job. Don't take the shared mask: ASIC_task writes back the
+                // last job's mask, so one fixed-version job would stick.
+                if (mining_notification->protocol == STRATUM_PROTOCOL_V2) {
+                    version_mask = mining_notification->no_version_rolling ? 0 : STRATUM_DEFAULT_VERSION_MASK;
+                }
+
+                if (mining_notification->merkle_root != NULL) {
+                    free(extranonce_str);
+                    generate_work(GLOBAL_STATE, mining_notification, 0, NULL, 0, version_mask,
+                                  GLOBAL_STATE->SYSTEM_MODULE.is_using_fallback ? POOL_SECONDARY : POOL_PRIMARY);
+                    fixed_job_sent = true;
+                    continue;
+                }
 
                 if (extranonce_str == NULL || extranonce_2_len <= 0) {
                     // No subscribe response yet (or out of memory) - nothing we
@@ -230,25 +256,41 @@ static void create_jobs_dual_pool_task(GlobalState *GLOBAL_STATE)
 static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, uint64_t extranonce_2,
                           const char *extranonce_str, int extranonce_2_len, uint32_t version_mask, int pool_id)
 {
-    char *extranonce_2_str = extranonce_2_generate(extranonce_2, extranonce_2_len);
-    if (extranonce_2_str == NULL) {
-        ESP_LOGE(TAG, "Failed to generate extranonce_2");
-        return;
-    }
+    char *extranonce_2_str;
+    char *coinbase_tx = NULL;
+    char *merkle_root;
 
-    char *coinbase_tx = construct_coinbase_tx(notification->coinbase_1, notification->coinbase_2, extranonce_str, extranonce_2_str);
-    if (coinbase_tx == NULL) {
-        ESP_LOGE(TAG, "Failed to construct coinbase_tx");
-        free(extranonce_2_str);
-        return;
-    }
+    if (notification->merkle_root != NULL) {
+        // SV2 standard channel: no coinbase, no extranonce_2.
+        extranonce_2_str = strdup("");
+        merkle_root = strdup(notification->merkle_root);
+        if (extranonce_2_str == NULL || merkle_root == NULL) {
+            ESP_LOGE(TAG, "Failed to copy fixed merkle_root job");
+            free(extranonce_2_str);
+            free(merkle_root);
+            return;
+        }
+    } else {
+        extranonce_2_str = extranonce_2_generate(extranonce_2, extranonce_2_len);
+        if (extranonce_2_str == NULL) {
+            ESP_LOGE(TAG, "Failed to generate extranonce_2");
+            return;
+        }
 
-    char *merkle_root = calculate_merkle_root_hash(coinbase_tx, (uint8_t(*)[32])notification->merkle_branches, notification->n_merkle_branches);
-    if (merkle_root == NULL) {
-        ESP_LOGE(TAG, "Failed to calculate merkle_root");
-        free(extranonce_2_str);
-        free(coinbase_tx);
-        return;
+        coinbase_tx = construct_coinbase_tx(notification->coinbase_1, notification->coinbase_2, extranonce_str, extranonce_2_str);
+        if (coinbase_tx == NULL) {
+            ESP_LOGE(TAG, "Failed to construct coinbase_tx");
+            free(extranonce_2_str);
+            return;
+        }
+
+        merkle_root = calculate_merkle_root_hash(coinbase_tx, (uint8_t(*)[32])notification->merkle_branches, notification->n_merkle_branches);
+        if (merkle_root == NULL) {
+            ESP_LOGE(TAG, "Failed to calculate merkle_root");
+            free(extranonce_2_str);
+            free(coinbase_tx);
+            return;
+        }
     }
 
     bm_job next_job = construct_bm_job(notification, merkle_root, version_mask);
@@ -267,6 +309,7 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
     queued_next_job->jobid = strdup(notification->job_id);
     queued_next_job->version_mask = version_mask;
     queued_next_job->pool_id = pool_id;
+    queued_next_job->protocol = notification->protocol;
     queued_next_job->asic_diff = GLOBAL_STATE->ASIC_difficulty;
 
     queue_enqueue(&GLOBAL_STATE->ASIC_jobs_queue, queued_next_job);

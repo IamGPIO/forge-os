@@ -15,6 +15,7 @@
 #include "power.h"
 #include "asic.h"
 #include "adc.h"
+#include "asic_reset.h"
 
 #define POLL_RATE 2000
 #define MAX_TEMP 90.0
@@ -27,6 +28,12 @@
 
 #define TPS546_THROTTLE_TEMP 105.0
 #define TPS546_MAX_TEMP 145.0
+
+// The BM1370 comes out of reset at this UART speed.
+#define ASIC_DEFAULT_BAUD 115200
+// ASIC_result_task can sit in a 10 s UART read before it notices a pause.
+#define ASIC_RESULT_PARK_TIMEOUT_MS 15000
+#define ASIC_RESTART_RETRY_MS 10000
 
 static const char * TAG = "power_management";
 
@@ -85,6 +92,63 @@ static double automatic_fan_speed(float chip_temp, float vr_temp, GlobalState * 
     return result;
 }
 
+// No pool is reachable: there is nothing to hash, so cut the core voltage
+// and hold the ASIC in reset (as the restart shutdown handler does).
+static void mining_stop(GlobalState * GLOBAL_STATE)
+{
+    ESP_LOGW(TAG, "Pausing mining, powering the ASIC down");
+
+    // Stop every task from issuing UART commands, then give one that is
+    // mid-write time to finish.
+    GLOBAL_STATE->ASIC_initalized = false;
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    asic_hold_reset_low();
+    VCORE_set_voltage(0.0, GLOBAL_STATE);
+    ESP_LOGI(TAG, "ASIC held in reset");
+}
+
+static bool mining_start(GlobalState * GLOBAL_STATE, uint16_t core_voltage)
+{
+    ESP_LOGI(TAG, "Resuming mining, re-initialising the ASIC");
+
+    int waited_ms = 0;
+    while (!GLOBAL_STATE->asic_result_parked && waited_ms < ASIC_RESULT_PARK_TIMEOUT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        waited_ms += 100;
+    }
+    if (!GLOBAL_STATE->asic_result_parked) {
+        ESP_LOGE(TAG, "ASIC result task still reading the UART, retrying later");
+        return false;
+    }
+
+    VCORE_set_voltage((double) core_voltage / 1000.0, GLOBAL_STATE);
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    SERIAL_set_baud(ASIC_DEFAULT_BAUD);
+    SERIAL_clear_buffer();
+
+    // Resets the chip and runs the same init sequence as at boot.
+    if (ASIC_init(GLOBAL_STATE) == 0) {
+        ESP_LOGE(TAG, "ASIC did not answer after resume, retrying later");
+        asic_hold_reset_low();
+        VCORE_set_voltage(0.0, GLOBAL_STATE);
+        return false;
+    }
+
+    SERIAL_set_baud(ASIC_set_max_baud(GLOBAL_STATE));
+    SERIAL_clear_buffer();
+
+    // Init programs the default version mask; restore the pool's.
+    if (GLOBAL_STATE->version_mask != 0) {
+        ASIC_set_version_mask(GLOBAL_STATE, GLOBAL_STATE->version_mask);
+    }
+
+    GLOBAL_STATE->ASIC_initalized = true;
+    ESP_LOGI(TAG, "ASIC running again");
+    return true;
+}
+
 void POWER_MANAGEMENT_task(void * pvParameters)
 {
     ESP_LOGI(TAG, "Starting");
@@ -102,6 +166,8 @@ void POWER_MANAGEMENT_task(void * pvParameters)
     vTaskDelay(500 / portTICK_PERIOD_MS);
     uint16_t last_core_voltage = 0.0;
     uint16_t last_asic_frequency = power_management->frequency_value;
+    bool is_paused = false;
+    TickType_t next_start_attempt = 0;
     
     while (1) {
         PAC9544_selectChannel(even + 2U);
@@ -192,6 +258,28 @@ void POWER_MANAGEMENT_task(void * pvParameters)
         // New voltage and frequency adjustment code
         uint16_t core_voltage = nvs_config_get_u16(NVS_CONFIG_ASIC_VOLTAGE, CONFIG_ASIC_VOLTAGE);
         uint16_t asic_frequency = nvs_config_get_u16(NVS_CONFIG_ASIC_FREQ, CONFIG_ASIC_FREQUENCY);
+
+        // Pause while no pool is reachable; the stratum task clears the flag
+        // once one answers again.
+        if (sys_module->pools_unavailable && !is_paused) {
+            mining_stop(GLOBAL_STATE);
+            is_paused = true;
+        } else if (!sys_module->pools_unavailable && is_paused &&
+                   (int32_t)(xTaskGetTickCount() - next_start_attempt) >= 0) {
+            if (mining_start(GLOBAL_STATE, core_voltage)) {
+                is_paused = false;
+                last_core_voltage = core_voltage;
+            } else {
+                next_start_attempt = xTaskGetTickCount() + pdMS_TO_TICKS(ASIC_RESTART_RETRY_MS);
+            }
+        }
+
+        // Voltage and frequency are applied again by mining_start().
+        if (is_paused) {
+            even = !even;
+            vTaskDelay(POLL_RATE / portTICK_PERIOD_MS);
+            continue;
+        }
 
         if (core_voltage != last_core_voltage) {
             ESP_LOGI(TAG, "setting new vcore voltage to %umV", core_voltage);

@@ -276,6 +276,20 @@ double le256todouble(const void *target)
     return dcut64;
 }
 
+/* Converts a 256 bit little endian share target (as used by Stratum V2) to a
+ * pool difficulty. An all-zero target cannot be met and is reported as the
+ * largest difficulty instead of dividing by zero. */
+double target_to_diff(const uint8_t target[32])
+{
+    static const double truediffone = 26959535291011309493156476344723991336010898738574164086137773096960.0;
+
+    double t = le256todouble(target);
+    if (t <= 0.0) {
+        return (double)UINT32_MAX;
+    }
+    return truediffone / t;
+}
+
 void prettyHex(unsigned char *buf, int len)
 {
     int i;

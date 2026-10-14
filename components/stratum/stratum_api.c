@@ -595,6 +595,7 @@ void STRATUM_V1_free_mining_notify(mining_notify * params)
     free(params->coinbase_1);
     free(params->coinbase_2);
     free(params->merkle_branches);
+    free(params->merkle_root);
     free(params);
 }
 

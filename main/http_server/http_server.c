@@ -40,6 +40,7 @@
 #include "http_server.h"
 #include "handler_ota_github.h"
 #include "nvs_config.h"
+#include "sv2_protocol.h"
 #include "power.h"
 #include "system.h"
 #include "vcore.h"
@@ -72,15 +73,44 @@ static bool parse_port(const char *value, uint16_t *port)
 typedef struct {
     bool parsed_port;
     bool parsed_tls;
+    bool parsed_protocol;
+    bool parsed_authority_key;
 } stratum_url_parse_result_t;
 
-static stratum_url_parse_result_t save_stratum_url(const char *url_key, const char *port_key, const char *tls_key, const char *value)
+typedef struct {
+    const char *url;
+    const char *port;
+    const char *tls;
+    const char *protocol;
+    const char *authority_key;
+} stratum_url_keys_t;
+
+static const stratum_url_keys_t primary_url_keys = {
+    NVS_CONFIG_STRATUM_URL, NVS_CONFIG_STRATUM_PORT, NVS_CONFIG_STRATUM_TLS,
+    NVS_CONFIG_STRATUM_PROTOCOL, NVS_CONFIG_STRATUM_SV2_AUTH_KEY,
+};
+
+static const stratum_url_keys_t fallback_url_keys = {
+    NVS_CONFIG_FALLBACK_STRATUM_URL, NVS_CONFIG_FALLBACK_STRATUM_PORT, NVS_CONFIG_FALLBACK_STRATUM_TLS,
+    NVS_CONFIG_FALLBACK_STRATUM_PROTOCOL, NVS_CONFIG_FALLBACK_STRATUM_SV2_AUTH_KEY,
+};
+
+// Accepts a bare host or a full pool URL. The scheme sets the protocol (and
+// TLS for V1); a stratum2+tcp://host:port/<authority pubkey> URL also carries
+// the pool's SV2 authority key in its path.
+static stratum_url_parse_result_t save_stratum_url(const stratum_url_keys_t *keys, const char *value)
 {
     stratum_url_parse_result_t result = {0};
     const char *host = value;
     int tls_mode = -1;
+    int protocol = -1;
 
-    if (strncasecmp(host, "stratum+tcp://", strlen("stratum+tcp://")) == 0) {
+    if (strncasecmp(host, "stratum2+tcp://", strlen("stratum2+tcp://")) == 0) {
+        host += strlen("stratum2+tcp://");
+        protocol = STRATUM_PROTOCOL_V2;
+        // SV2 encrypts with Noise, never with TLS.
+        tls_mode = DISABLED;
+    } else if (strncasecmp(host, "stratum+tcp://", strlen("stratum+tcp://")) == 0) {
         host += strlen("stratum+tcp://");
         tls_mode = DISABLED;
     } else if (strncasecmp(host, "stratum+tls://", strlen("stratum+tls://")) == 0) {
@@ -96,9 +126,18 @@ static stratum_url_parse_result_t save_stratum_url(const char *url_key, const ch
         return result;
     }
 
+    if (strncasecmp(value, "stratum+", strlen("stratum+")) == 0 && tls_mode >= 0) {
+        protocol = STRATUM_PROTOCOL_V1;
+    }
+
     char *path = strchr(normalized, '/');
     if (path != NULL) {
         *path = '\0';
+        const char *authority_key = path + 1;
+        if (protocol == STRATUM_PROTOCOL_V2 && authority_key[0] != '\0') {
+            nvs_config_set_string(keys->authority_key, authority_key);
+            result.parsed_authority_key = true;
+        }
     }
 
     char *port_start = strrchr(normalized, ':');
@@ -106,15 +145,19 @@ static stratum_url_parse_result_t save_stratum_url(const char *url_key, const ch
         uint16_t port;
         if (parse_port(port_start + 1, &port)) {
             *port_start = '\0';
-            nvs_config_set_u16(port_key, port);
+            nvs_config_set_u16(keys->port, port);
             result.parsed_port = true;
         }
     }
 
-    nvs_config_set_string(url_key, normalized);
+    nvs_config_set_string(keys->url, normalized);
     if (tls_mode >= 0) {
-        nvs_config_set_u16(tls_key, (uint16_t)tls_mode);
+        nvs_config_set_u16(keys->tls, (uint16_t)tls_mode);
         result.parsed_tls = true;
+    }
+    if (protocol >= 0) {
+        nvs_config_set_u16(keys->protocol, (uint16_t)protocol);
+        result.parsed_protocol = true;
     }
 
     free(normalized);
@@ -630,10 +673,34 @@ static esp_err_t PATCH_update_settings(httpd_req_t * req)
     stratum_url_parse_result_t fallback_stratum_url_result = {0};
 
     if (cJSON_IsString(item = cJSON_GetObjectItem(root, "stratumURL"))) {
-        stratum_url_result = save_stratum_url(NVS_CONFIG_STRATUM_URL, NVS_CONFIG_STRATUM_PORT, NVS_CONFIG_STRATUM_TLS, item->valuestring);
+        stratum_url_result = save_stratum_url(&primary_url_keys, item->valuestring);
     }
     if (cJSON_IsString(item = cJSON_GetObjectItem(root, "fallbackStratumURL"))) {
-        fallback_stratum_url_result = save_stratum_url(NVS_CONFIG_FALLBACK_STRATUM_URL, NVS_CONFIG_FALLBACK_STRATUM_PORT, NVS_CONFIG_FALLBACK_STRATUM_TLS, item->valuestring);
+        fallback_stratum_url_result = save_stratum_url(&fallback_url_keys, item->valuestring);
+    }
+    if (cJSON_IsNumber(item = cJSON_GetObjectItem(root, "stratumProtocol")) && !stratum_url_result.parsed_protocol) {
+        nvs_config_set_u16(NVS_CONFIG_STRATUM_PROTOCOL, item->valueint == STRATUM_PROTOCOL_V2 ? STRATUM_PROTOCOL_V2 : STRATUM_PROTOCOL_V1);
+    }
+    if (cJSON_IsNumber(item = cJSON_GetObjectItem(root, "fallbackStratumProtocol")) && !fallback_stratum_url_result.parsed_protocol) {
+        nvs_config_set_u16(NVS_CONFIG_FALLBACK_STRATUM_PROTOCOL, item->valueint == STRATUM_PROTOCOL_V2 ? STRATUM_PROTOCOL_V2 : STRATUM_PROTOCOL_V1);
+    }
+    if (cJSON_IsNumber(item = cJSON_GetObjectItem(root, "stratumV2ChannelType"))) {
+        nvs_config_set_u16(NVS_CONFIG_STRATUM_SV2_CHANNEL, item->valueint == SV2_CHANNEL_STANDARD ? SV2_CHANNEL_STANDARD : SV2_CHANNEL_EXTENDED);
+    }
+    if (cJSON_IsNumber(item = cJSON_GetObjectItem(root, "fallbackStratumV2ChannelType"))) {
+        nvs_config_set_u16(NVS_CONFIG_FALLBACK_STRATUM_SV2_CHANNEL, item->valueint == SV2_CHANNEL_STANDARD ? SV2_CHANNEL_STANDARD : SV2_CHANNEL_EXTENDED);
+    }
+    if (cJSON_IsString(item = cJSON_GetObjectItem(root, "stratumV2AuthorityPubkey")) && !stratum_url_result.parsed_authority_key) {
+        nvs_config_set_string(NVS_CONFIG_STRATUM_SV2_AUTH_KEY, item->valuestring);
+    }
+    if (cJSON_IsString(item = cJSON_GetObjectItem(root, "fallbackStratumV2AuthorityPubkey")) && !fallback_stratum_url_result.parsed_authority_key) {
+        nvs_config_set_string(NVS_CONFIG_FALLBACK_STRATUM_SV2_AUTH_KEY, item->valuestring);
+    }
+    if ((item = cJSON_GetObjectItem(root, "stratumV2RequireAuth")) != NULL) {
+        nvs_config_set_u16(NVS_CONFIG_STRATUM_SV2_REQUIRE_AUTH, cJSON_IsTrue(item) || (cJSON_IsNumber(item) && item->valueint) ? 1 : 0);
+    }
+    if ((item = cJSON_GetObjectItem(root, "fallbackStratumV2RequireAuth")) != NULL) {
+        nvs_config_set_u16(NVS_CONFIG_FALLBACK_STRATUM_SV2_REQUIRE_AUTH, cJSON_IsTrue(item) || (cJSON_IsNumber(item) && item->valueint) ? 1 : 0);
     }
     if (cJSON_IsString(item = cJSON_GetObjectItem(root, "stratumUser"))) {
         nvs_config_set_string(NVS_CONFIG_STRATUM_USER, item->valuestring);
@@ -879,6 +946,14 @@ typedef struct {
     char * fallback_stratum_user;
     char * stratum_cert;
     char * fallback_stratum_cert;
+    char * stratum_sv2_authority_pubkey;
+    char * fallback_stratum_sv2_authority_pubkey;
+    uint16_t stratum_protocol;
+    uint16_t fallback_stratum_protocol;
+    uint16_t stratum_sv2_channel_type;
+    uint16_t fallback_stratum_sv2_channel_type;
+    uint16_t stratum_sv2_require_auth;
+    uint16_t fallback_stratum_sv2_require_auth;
     uint16_t core_voltage;
     uint16_t frequency;
     uint16_t pool_mode;
@@ -918,6 +993,14 @@ static const system_info_settings_t * get_system_info_settings(void)
     reload_cached_string(&info_settings.fallback_stratum_user, NVS_CONFIG_FALLBACK_STRATUM_USER, CONFIG_FALLBACK_STRATUM_USER);
     reload_cached_string(&info_settings.stratum_cert, NVS_CONFIG_STRATUM_CERT, CONFIG_STRATUM_CERT);
     reload_cached_string(&info_settings.fallback_stratum_cert, NVS_CONFIG_FALLBACK_STRATUM_CERT, CONFIG_FALLBACK_STRATUM_CERT);
+    reload_cached_string(&info_settings.stratum_sv2_authority_pubkey, NVS_CONFIG_STRATUM_SV2_AUTH_KEY, "");
+    reload_cached_string(&info_settings.fallback_stratum_sv2_authority_pubkey, NVS_CONFIG_FALLBACK_STRATUM_SV2_AUTH_KEY, "");
+    info_settings.stratum_protocol = nvs_config_get_u16(NVS_CONFIG_STRATUM_PROTOCOL, STRATUM_PROTOCOL_V1);
+    info_settings.fallback_stratum_protocol = nvs_config_get_u16(NVS_CONFIG_FALLBACK_STRATUM_PROTOCOL, STRATUM_PROTOCOL_V1);
+    info_settings.stratum_sv2_channel_type = nvs_config_get_u16(NVS_CONFIG_STRATUM_SV2_CHANNEL, SV2_CHANNEL_EXTENDED);
+    info_settings.fallback_stratum_sv2_channel_type = nvs_config_get_u16(NVS_CONFIG_FALLBACK_STRATUM_SV2_CHANNEL, SV2_CHANNEL_EXTENDED);
+    info_settings.stratum_sv2_require_auth = nvs_config_get_u16(NVS_CONFIG_STRATUM_SV2_REQUIRE_AUTH, 0);
+    info_settings.fallback_stratum_sv2_require_auth = nvs_config_get_u16(NVS_CONFIG_FALLBACK_STRATUM_SV2_REQUIRE_AUTH, 0);
 
     info_settings.core_voltage = nvs_config_get_u16(NVS_CONFIG_ASIC_VOLTAGE, CONFIG_ASIC_VOLTAGE);
     info_settings.frequency = nvs_config_get_u16(NVS_CONFIG_ASIC_FREQ, CONFIG_ASIC_FREQUENCY);
@@ -937,7 +1020,8 @@ static const system_info_settings_t * get_system_info_settings(void)
     info_settings.loaded = info_settings.ssid && info_settings.hostname && info_settings.stratum_url &&
                            info_settings.fallback_stratum_url && info_settings.stratum_user &&
                            info_settings.fallback_stratum_user && info_settings.stratum_cert &&
-                           info_settings.fallback_stratum_cert;
+                           info_settings.fallback_stratum_cert && info_settings.stratum_sv2_authority_pubkey &&
+                           info_settings.fallback_stratum_sv2_authority_pubkey;
     return &info_settings;
 }
 
@@ -983,6 +1067,7 @@ static esp_err_t GET_system_info(httpd_req_t * req)
     cJSON_AddNumberToObject(root, "stratumDiff", GLOBAL_STATE->stratum_difficulty);
 
     cJSON_AddNumberToObject(root, "isUsingFallbackStratum", GLOBAL_STATE->SYSTEM_MODULE.is_using_fallback);
+    cJSON_AddBoolToObject(root, "poolsUnavailable", GLOBAL_STATE->SYSTEM_MODULE.pools_unavailable);
 
     cJSON_AddNumberToObject(root, "isPSRAMAvailable", GLOBAL_STATE->psram_is_available);
 
@@ -1055,6 +1140,14 @@ static esp_err_t GET_system_info(httpd_req_t * req)
 
     cJSON_AddStringToObject(root, "stratumCert", settings->stratum_cert);
     cJSON_AddStringToObject(root, "fallbackStratumCert", settings->fallback_stratum_cert);
+    cJSON_AddNumberToObject(root, "stratumProtocol", settings->stratum_protocol);
+    cJSON_AddNumberToObject(root, "fallbackStratumProtocol", settings->fallback_stratum_protocol);
+    cJSON_AddNumberToObject(root, "stratumV2ChannelType", settings->stratum_sv2_channel_type);
+    cJSON_AddNumberToObject(root, "fallbackStratumV2ChannelType", settings->fallback_stratum_sv2_channel_type);
+    cJSON_AddStringToObject(root, "stratumV2AuthorityPubkey", settings->stratum_sv2_authority_pubkey);
+    cJSON_AddStringToObject(root, "fallbackStratumV2AuthorityPubkey", settings->fallback_stratum_sv2_authority_pubkey);
+    cJSON_AddBoolToObject(root, "stratumV2RequireAuth", settings->stratum_sv2_require_auth != 0);
+    cJSON_AddBoolToObject(root, "fallbackStratumV2RequireAuth", settings->fallback_stratum_sv2_require_auth != 0);
 
     cJSON_AddStringToObject(root, "version", esp_app_get_description()->version);
     cJSON_AddStringToObject(root, "idfVersion", esp_get_idf_version());

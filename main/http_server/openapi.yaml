@@ -216,6 +216,33 @@ components:
         stratumUser:
           type: string
           description: Primary stratum username
+        stratumProtocol:
+          type: number
+          description: Primary pool protocol (0=Stratum V1, 1=Stratum V2)
+        fallbackStratumProtocol:
+          type: number
+          description: Fallback pool protocol (0=Stratum V1, 1=Stratum V2)
+        stratumV2ChannelType:
+          type: number
+          description: Primary pool SV2 channel type (1=standard, 2=extended)
+        fallbackStratumV2ChannelType:
+          type: number
+          description: Fallback pool SV2 channel type (1=standard, 2=extended)
+        stratumV2AuthorityPubkey:
+          type: string
+          description: Primary pool SV2 authority public key (Base58Check)
+        fallbackStratumV2AuthorityPubkey:
+          type: string
+          description: Fallback pool SV2 authority public key (Base58Check)
+        stratumV2RequireAuth:
+          type: boolean
+          description: Refuse to connect to the primary SV2 pool without a verified authority key
+        fallbackStratumV2RequireAuth:
+          type: boolean
+          description: Refuse to connect to the fallback SV2 pool without a verified authority key
+        poolsUnavailable:
+          type: boolean
+          description: No configured pool is reachable; mining is paused and the ASIC powered down
         temp:
           type: number
           description: Average chip temperature
@@ -284,6 +311,42 @@ components:
           maximum: 65535
           examples:
             - 3333
+        stratumProtocol:
+          type: integer
+          description: >
+            Primary pool protocol (0=Stratum V1, 1=Stratum V2). A stratumURL
+            with a stratum+tcp://, stratum+tls:// or stratum2+tcp:// scheme sets
+            it and takes precedence. Stratum V2 is not supported in dual-pool mode.
+          enum: [0, 1]
+        fallbackStratumProtocol:
+          type: integer
+          description: Fallback pool protocol, see stratumProtocol
+          enum: [0, 1]
+        stratumV2ChannelType:
+          type: integer
+          description: >
+            Primary pool SV2 channel type (1=standard, 2=extended). Extended
+            channels are recommended for external pools; standard channels only
+            for a local SV2 node or job declarator client.
+          enum: [1, 2]
+        fallbackStratumV2ChannelType:
+          type: integer
+          description: Fallback pool SV2 channel type, see stratumV2ChannelType
+          enum: [1, 2]
+        stratumV2AuthorityPubkey:
+          type: string
+          description: >
+            Primary pool SV2 authority public key (Base58Check). Also taken from
+            the path of a stratum2+tcp://host:port/<key> stratumURL.
+        fallbackStratumV2AuthorityPubkey:
+          type: string
+          description: Fallback pool SV2 authority public key, see stratumV2AuthorityPubkey
+        stratumV2RequireAuth:
+          type: boolean
+          description: Refuse to connect to the primary SV2 pool without a verified authority key
+        fallbackStratumV2RequireAuth:
+          type: boolean
+          description: Refuse to connect to the fallback SV2 pool without a verified authority key
         ssid:
           type: string
           description: WiFi network SSID

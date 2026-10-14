@@ -30,6 +30,8 @@ void reverse_bytes(uint8_t *data, size_t len);
 
 double le256todouble(const void *target);
 
+double target_to_diff(const uint8_t target[32]);
+
 void prettyHex(unsigned char *buf, int len);
 
 uint32_t flip32(uint32_t val);

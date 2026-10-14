@@ -22,6 +22,7 @@ typedef struct
     uint8_t midstate3[32];
     double pool_diff;
     int pool_id;
+    stratum_protocol_t protocol;
     uint32_t asic_diff;
     char *jobid;
     char *extranonce2;
