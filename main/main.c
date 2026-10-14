@@ -2,6 +2,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_psram.h"
+#include "esp_system.h"
 #include "nvs_flash.h"
 
 // #include "protocol_examples_common.h"
@@ -23,6 +24,8 @@
 #include "self_test.h"
 #include "asic.h"
 #include "setup_ble.h"
+#include "asic_reset.h"
+#include "vcore.h"
 
 static GlobalState GLOBAL_STATE = {
     .extranonce_str = NULL, 
@@ -33,6 +36,16 @@ static GlobalState GLOBAL_STATE = {
 };
 
 static const char * TAG = "bitforge";
+
+// Runs inside every esp_restart() (OTA, API restart, ...). A software reset
+// does not power cycle the ASIC, so put it to sleep before the ESP32 resets.
+static void asic_shutdown_handler(void)
+{
+    GLOBAL_STATE.ASIC_initalized = false;
+    asic_hold_reset_low();
+    VCORE_set_voltage(0.0f, &GLOBAL_STATE);
+    ESP_LOGI(TAG, "ASIC held in reset for restart");
+}
 
 #define AP_GRACE_PERIOD_MS (7 * 60 * 1000)
 #define AP_DISABLE_RETRY_MS 5000
@@ -86,6 +99,10 @@ static void ap_timeout_task(void * pvParameters)
 void app_main(void)
 {
     ESP_LOGI(TAG, "Welcome to the bitforge nano || GTFO!");
+
+    // Initialize RST pin to low early to minimize ASIC power consumption
+    ESP_ERROR_CHECK(asic_hold_reset_low());
+    ESP_LOGI(TAG, "RST pin initialized to low");
 
     if (!esp_psram_is_initialized()) {
         ESP_LOGE(TAG, "No PSRAM available on ESP32 device!");
@@ -150,6 +167,10 @@ void app_main(void)
     }
 
     SYSTEM_init_peripherals(&GLOBAL_STATE);
+
+    if (esp_register_shutdown_handler(asic_shutdown_handler) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to register ASIC shutdown handler");
+    }
 
     xTaskCreate(POWER_MANAGEMENT_task, "power management", 8192, (void *) &GLOBAL_STATE, 10, NULL);
 
