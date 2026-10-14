@@ -74,7 +74,6 @@ export interface ISystemInfo {
     frequency: number,
     version: string,
     idfVersion: string,
-    boardVersion: string,
     autofanspeed: number,
     fanSpeed: number,
     manualFanSpeed: number,

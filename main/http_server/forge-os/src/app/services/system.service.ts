@@ -106,7 +106,6 @@ export class SystemService {
           frequency: 485,
           version: "2.0",
           idfVersion: "v6.0.2",
-          boardVersion: "204",
           autofanspeed: 1,
           fanSpeed: 100,
           manualFanSpeed: 100,

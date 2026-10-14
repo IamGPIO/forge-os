@@ -79,7 +79,6 @@ components:
         - autofanspeed
         - bestDiff
         - bestSessionDiff
-        - boardVersion
         - coreVoltage
         - coreVoltageActual
         - current
@@ -133,9 +132,6 @@ components:
         bestSessionDiff:
           type: string
           description: Best difficulty achieved in current session
-        boardVersion:
-          type: string
-          description: Hardware board version
         coreVoltage:
           type: number
           description: Configured ASIC core voltage

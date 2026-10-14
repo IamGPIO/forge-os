@@ -266,23 +266,11 @@ export class SwarmComponent implements OnInit, OnDestroy {
   // Fallback logic to derive deviceModel and swarmColor, can be removed after some time
   private fallbackDeviceModel(data: any): any {
     if (data.deviceModel && data.swarmColor && data.poolDifficulty && data.hashRate) return data;
-    const deviceModel = data.deviceModel || this.deriveDeviceModel(data);
+    const deviceModel = data.deviceModel || 'Other';
     const swarmColor = data.swarmColor || this.deriveSwarmColor(deviceModel);
     const poolDifficulty = data.poolDifficulty || data.stratumDiff;
     const hashRate = data.hashRate || data.hashRate_10m;
     return { ...data, deviceModel, swarmColor, poolDifficulty, hashRate };
-  }
-
-  private deriveDeviceModel(data: any): string {
-    if (data.boardVersion && data.boardVersion.length > 1) {
-      if (data.boardVersion[0] == "1" || data.boardVersion == "2.2") return "Max";
-      if (data.boardVersion[0] == "2" || data.boardVersion == "0.11") return "Ultra";
-      if (data.boardVersion[0] == "3") return "UltraHex";
-      if (data.boardVersion[0] == "4") return "Supra";
-      if (data.boardVersion[0] == "6") return "Gamma";
-      if (data.boardVersion[0] == "8") return "GammaTurbo";
-    }
-    return 'Other';
   }
 
   private deriveSwarmColor(deviceModel: string): string {

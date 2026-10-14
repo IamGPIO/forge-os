@@ -879,7 +879,6 @@ typedef struct {
     char * fallback_stratum_user;
     char * stratum_cert;
     char * fallback_stratum_cert;
-    char * board_version;
     uint16_t core_voltage;
     uint16_t frequency;
     uint16_t pool_mode;
@@ -919,7 +918,6 @@ static const system_info_settings_t * get_system_info_settings(void)
     reload_cached_string(&info_settings.fallback_stratum_user, NVS_CONFIG_FALLBACK_STRATUM_USER, CONFIG_FALLBACK_STRATUM_USER);
     reload_cached_string(&info_settings.stratum_cert, NVS_CONFIG_STRATUM_CERT, CONFIG_STRATUM_CERT);
     reload_cached_string(&info_settings.fallback_stratum_cert, NVS_CONFIG_FALLBACK_STRATUM_CERT, CONFIG_FALLBACK_STRATUM_CERT);
-    reload_cached_string(&info_settings.board_version, NVS_CONFIG_BOARD_VERSION, "unknown");
 
     info_settings.core_voltage = nvs_config_get_u16(NVS_CONFIG_ASIC_VOLTAGE, CONFIG_ASIC_VOLTAGE);
     info_settings.frequency = nvs_config_get_u16(NVS_CONFIG_ASIC_FREQ, CONFIG_ASIC_FREQUENCY);
@@ -939,7 +937,7 @@ static const system_info_settings_t * get_system_info_settings(void)
     info_settings.loaded = info_settings.ssid && info_settings.hostname && info_settings.stratum_url &&
                            info_settings.fallback_stratum_url && info_settings.stratum_user &&
                            info_settings.fallback_stratum_user && info_settings.stratum_cert &&
-                           info_settings.fallback_stratum_cert && info_settings.board_version;
+                           info_settings.fallback_stratum_cert;
     return &info_settings;
 }
 
@@ -1060,7 +1058,6 @@ static esp_err_t GET_system_info(httpd_req_t * req)
 
     cJSON_AddStringToObject(root, "version", esp_app_get_description()->version);
     cJSON_AddStringToObject(root, "idfVersion", esp_get_idf_version());
-    cJSON_AddStringToObject(root, "boardVersion", settings->board_version);
     cJSON_AddStringToObject(root, "runningPartition", esp_ota_get_running_partition()->label);
 
     cJSON_AddNumberToObject(root, "overheat_mode", settings->overheat_mode);
