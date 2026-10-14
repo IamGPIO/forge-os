@@ -19,7 +19,6 @@ asicfrequency,data,u16,525
 asicvoltage,data,u16,1150
 asicmodel,data,string,BM1370
 devicemodel,data,string,BITFORGE_NANO
-boardversion,data,string,800
 autofanspeed,data,u16,1
 fanspeed,data,u16,66
 productiontest,data,u16,1
