@@ -50,10 +50,6 @@ void SYSTEM_init_system(GlobalState * GLOBAL_STATE)
 {
     SystemModule * module = &GLOBAL_STATE->SYSTEM_MODULE;
 
-    module->duration_start = 0;
-    module->historical_hashrate_rolling_index = 0;
-    module->historical_hashrate_init = 0;
-    module->current_hashrate = 0;
     module->shares_accepted = 0;
     module->shares_rejected = 0;
     module->led_blink_enabled = nvs_config_get_u16(NVS_CONFIG_LED_BLINK, 1) != 0;
@@ -308,13 +304,6 @@ void SYSTEM_notify_rejected_share(GlobalState * GLOBAL_STATE, int pool_id, char 
     }    
 }
 
-void SYSTEM_notify_mining_started(GlobalState * GLOBAL_STATE)
-{
-    SystemModule * module = &GLOBAL_STATE->SYSTEM_MODULE;
-
-    module->duration_start = esp_timer_get_time();
-}
-
 void SYSTEM_notify_new_ntime(GlobalState * GLOBAL_STATE, uint32_t ntime)
 {
     SystemModule * module = &GLOBAL_STATE->SYSTEM_MODULE;
@@ -333,42 +322,6 @@ void SYSTEM_notify_new_ntime(GlobalState * GLOBAL_STATE, uint32_t ntime)
 
 void SYSTEM_notify_found_nonce(GlobalState * GLOBAL_STATE, double found_diff, uint8_t job_id)
 {
-    SystemModule * module = &GLOBAL_STATE->SYSTEM_MODULE;
-
-    // OLD SHARE-BASED HASHRATE CALCULATION - DISABLED
-    // Now using register-based hashrate from HASHRATE_MONITOR_MODULE
-    // The code below is kept for reference but commented out
-    /*
-    // Calculate the time difference in seconds with sub-second precision
-    // hashrate = (nonce_difficulty * 2^32) / time_to_find
-
-    module->historical_hashrate[module->historical_hashrate_rolling_index] = GLOBAL_STATE->ASIC_difficulty;
-    module->historical_hashrate_time_stamps[module->historical_hashrate_rolling_index] = esp_timer_get_time();
-
-    module->historical_hashrate_rolling_index = (module->historical_hashrate_rolling_index + 1) % HISTORY_LENGTH;
-
-    if (module->historical_hashrate_init < HISTORY_LENGTH) {
-        module->historical_hashrate_init++;
-    } else {
-        module->duration_start =
-            module->historical_hashrate_time_stamps[(module->historical_hashrate_rolling_index + 1) % HISTORY_LENGTH];
-    }
-    double sum = 0;
-    for (int i = 0; i < module->historical_hashrate_init; i++) {
-        sum += module->historical_hashrate[i];
-    }
-
-    double duration = (double) (esp_timer_get_time() - module->duration_start) / 1000000;
-
-    double rolling_rate = (sum * 4294967296) / (duration * 1000000000);
-    if (module->historical_hashrate_init < HISTORY_LENGTH) {
-        module->current_hashrate = rolling_rate;
-    } else {
-        // More smoothing
-        module->current_hashrate = ((module->current_hashrate * 9) + rolling_rate) / 10;
-    }
-    */
-
     _check_for_best_diff(GLOBAL_STATE, found_diff, job_id);
 }
 

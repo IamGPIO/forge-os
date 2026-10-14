@@ -18,7 +18,6 @@
 #define STRATUM_USER CONFIG_STRATUM_USER
 #define FALLBACK_STRATUM_USER CONFIG_FALLBACK_STRATUM_USER
 
-#define HISTORY_LENGTH 100
 #define DIFF_STRING_SIZE 10
 #define POOL_PRIMARY 0
 #define POOL_SECONDARY 1
@@ -60,12 +59,6 @@ typedef struct {
 
 typedef struct
 {
-    double duration_start;
-    int historical_hashrate_rolling_index;
-    double historical_hashrate_time_stamps[HISTORY_LENGTH];
-    double historical_hashrate[HISTORY_LENGTH];
-    int historical_hashrate_init;
-    double current_hashrate;
     int64_t start_time;
     uint64_t shares_accepted;
     uint64_t shares_rejected;
