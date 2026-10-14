@@ -80,7 +80,4 @@
         "ESP_ROM_ELF_DIR": "/Users/denickbe/.espressif/tools/esp-rom-elfs/20240305/",
         "IDF_TARGET": "esp32s3"
     },
-    "idf.espIdfPath": "/home/nther/esp/v5.5/esp-idf",
-    "idf.toolsPath": "/home/nther/.espressif",
-    "idf.pythonInstallPath": "/usr/bin/python3"
 }
