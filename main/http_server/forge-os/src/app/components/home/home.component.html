@@ -20,6 +20,11 @@
         text="⚡ BitForge frequency is set low - Optimize in settings">
     </p-message>
 
+    <p-message *ngIf="info.poolsUnavailable" severity="error"
+        styleClass="alert-message"
+        text="⛏️ No pool reachable - mining is paused until a pool answers again">
+    </p-message>
+
     <p-message *ngIf="info.power_fault" severity="error"
         styleClass="alert-message"
         text="🔌 {{info.power_fault}} - Check your Power Supply">
@@ -320,6 +325,10 @@
                             <span class="info-value">{{info.fallbackStratumUser | truncateMiddle:10:8}}</span>
                         </div>
                     </ng-container>
+                    <div class="info-item">
+                        <span class="info-label">Protocol</span>
+                        <span class="info-value">{{(info.isUsingFallbackStratum ? info.fallbackStratumProtocol : info.stratumProtocol) === 1 ? 'Stratum V2' : 'Stratum V1'}}</span>
+                    </div>
                     <div class="info-item">
                         <span class="info-label">Difficulty</span>
                         <span class="info-value">{{info.stratumDiff > 0 ? info.stratumDiff : '—'}}</span>

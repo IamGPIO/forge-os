@@ -36,6 +36,12 @@ typedef enum
     CUSTOM_CRT = 2,
 } tls_mode;
 
+typedef enum
+{
+    STRATUM_PROTOCOL_V1 = 0,
+    STRATUM_PROTOCOL_V2 = 1,
+} stratum_protocol_t;
+
 static const int  STRATUM_ID_CONFIGURE    = 1;
 static const int  STRATUM_ID_SUBSCRIBE    = 2;
 
@@ -52,6 +58,14 @@ typedef struct
     uint32_t ntime;
     double difficulty;
     bool clean_jobs;
+
+    stratum_protocol_t protocol;
+    // Stratum V2 standard channel: the pool hands out a finished merkle root
+    // (hex, header byte order) and there is no coinbase to build. NULL for
+    // every other job.
+    char *merkle_root;
+    // Stratum V2 extended job that the pool does not allow version rolling on.
+    bool no_version_rolling;
 } mining_notify;
 
 typedef struct

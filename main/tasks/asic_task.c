@@ -36,6 +36,14 @@ void ASIC_task(void *pvParameters)
 
         bm_job *next_bm_job = (bm_job *)queue_dequeue(&GLOBAL_STATE->ASIC_jobs_queue);
 
+        // Mining is paused (no pool reachable) or the ASIC is being brought
+        // back up; the chip cannot take work right now.
+        if (!GLOBAL_STATE->ASIC_initalized)
+        {
+            free_bm_job(next_bm_job);
+            continue;
+        }
+
         if (next_bm_job->pool_diff != GLOBAL_STATE->stratum_difficulty)
         {
             ESP_LOGI(TAG, "New pool difficulty %.2f", next_bm_job->pool_diff);

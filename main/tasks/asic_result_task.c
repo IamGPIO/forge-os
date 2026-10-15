@@ -19,6 +19,16 @@ void ASIC_result_task(void *pvParameters)
 
     while (1)
     {
+        // While the ASIC is powered down (or being brought back up) stay off
+        // the UART: ASIC init reads the chip's replies itself.
+        if (!GLOBAL_STATE->ASIC_initalized)
+        {
+            GLOBAL_STATE->asic_result_parked = true;
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            continue;
+        }
+        GLOBAL_STATE->asic_result_parked = false;
+
         //task_result *asic_result = (*GLOBAL_STATE->ASIC_functions.receive_result_fn)(GLOBAL_STATE);
         task_result *asic_result = ASIC_process_work(GLOBAL_STATE);
 
@@ -69,11 +79,13 @@ void ASIC_result_task(void *pvParameters)
         if (nonce_diff >= active_job->pool_diff)
         {
             int pool_id = active_job->pool_id;
+            stratum_protocol_t protocol = active_job->protocol;
             char *user = pool_id == POOL_SECONDARY ? GLOBAL_STATE->SYSTEM_MODULE.fallback_pool_user : GLOBAL_STATE->SYSTEM_MODULE.pool_user;
             char *jobid = strdup(active_job->jobid);
             char *extranonce2 = strdup(active_job->extranonce2);
             uint32_t ntime = active_job->ntime;
-            uint32_t version_bits = asic_result->rolled_version ^ active_job->version;
+            uint32_t rolled_version = asic_result->rolled_version;
+            uint32_t version_bits = rolled_version ^ active_job->version;
 
             if (jobid == NULL || extranonce2 == NULL) {
                 free(jobid);
@@ -91,12 +103,14 @@ void ASIC_result_task(void *pvParameters)
             int ret = stratum_submit_share(
                 GLOBAL_STATE,
                 pool_id,
+                protocol,
                 user,
                 jobid,
                 extranonce2,
                 ntime,
                 asic_result->nonce,
-                version_bits);
+                version_bits,
+                rolled_version);
 
             if (ret == STRATUM_SUBMIT_NO_CONNECTION) {
                 ESP_LOGW(TAG, "No transport available, dropping share");

@@ -27,6 +27,7 @@
 #include "nvs_config.h"
 #include "vcore.h"
 #include "ThermalMonitoring.h"
+#include "sv2_protocol.h"
 
 static const char * TAG = "SystemModule";
 
@@ -95,8 +96,31 @@ void SYSTEM_init_system(GlobalState * GLOBAL_STATE)
     module->pool_cert = nvs_config_get_string(NVS_CONFIG_STRATUM_CERT, CONFIG_STRATUM_CERT);
     module->fallback_pool_cert = nvs_config_get_string(NVS_CONFIG_FALLBACK_STRATUM_CERT, CONFIG_FALLBACK_STRATUM_CERT);
 
+    // set the pool protocol and its Stratum V2 options
+    module->pool_protocol = nvs_config_get_u16(NVS_CONFIG_STRATUM_PROTOCOL, STRATUM_PROTOCOL_V1);
+    module->fallback_pool_protocol = nvs_config_get_u16(NVS_CONFIG_FALLBACK_STRATUM_PROTOCOL, STRATUM_PROTOCOL_V1);
+    if (module->pool_protocol > STRATUM_PROTOCOL_V2) {
+        module->pool_protocol = STRATUM_PROTOCOL_V1;
+    }
+    if (module->fallback_pool_protocol > STRATUM_PROTOCOL_V2) {
+        module->fallback_pool_protocol = STRATUM_PROTOCOL_V1;
+    }
+    module->pool_sv2_channel_type = nvs_config_get_u16(NVS_CONFIG_STRATUM_SV2_CHANNEL, SV2_CHANNEL_EXTENDED);
+    module->fallback_pool_sv2_channel_type = nvs_config_get_u16(NVS_CONFIG_FALLBACK_STRATUM_SV2_CHANNEL, SV2_CHANNEL_EXTENDED);
+    if (module->pool_sv2_channel_type != SV2_CHANNEL_STANDARD) {
+        module->pool_sv2_channel_type = SV2_CHANNEL_EXTENDED;
+    }
+    if (module->fallback_pool_sv2_channel_type != SV2_CHANNEL_STANDARD) {
+        module->fallback_pool_sv2_channel_type = SV2_CHANNEL_EXTENDED;
+    }
+    module->pool_sv2_authority_pubkey = nvs_config_get_string(NVS_CONFIG_STRATUM_SV2_AUTH_KEY, "");
+    module->fallback_pool_sv2_authority_pubkey = nvs_config_get_string(NVS_CONFIG_FALLBACK_STRATUM_SV2_AUTH_KEY, "");
+    module->pool_sv2_require_auth = nvs_config_get_u16(NVS_CONFIG_STRATUM_SV2_REQUIRE_AUTH, 0) != 0;
+    module->fallback_pool_sv2_require_auth = nvs_config_get_u16(NVS_CONFIG_FALLBACK_STRATUM_SV2_REQUIRE_AUTH, 0) != 0;
+
     // set fallback to false.
     module->is_using_fallback = false;
+    module->pools_unavailable = false;
     module->pool_mode = nvs_config_get_u16(NVS_CONFIG_POOL_MODE, POOL_MODE_FALLBACK);
     if (module->pool_mode > POOL_MODE_DUAL) {
         module->pool_mode = POOL_MODE_FALLBACK;
@@ -125,6 +149,7 @@ void SYSTEM_init_system(GlobalState * GLOBAL_STATE)
         GLOBAL_STATE->pools[i].extranonce_2 = 0;
         GLOBAL_STATE->pools[i].shares_accepted = 0;
         GLOBAL_STATE->pools[i].shares_rejected = 0;
+        GLOBAL_STATE->pools[i].connect_failures = 0;
         memset(&GLOBAL_STATE->pools[i].coinbase, 0, sizeof(CoinbaseInfo));
     }
 

@@ -158,6 +158,13 @@ void hashrate_monitor_task(void *pvParameters)
 
     TickType_t taskWakeTime = xTaskGetTickCount();
     while (1) {
+        if (!GLOBAL_STATE->ASIC_initalized) {
+            // ASIC powered down: no register reads, and nothing is hashing.
+            HASHRATE_MONITOR_MODULE->hashrate = 0.0;
+            vTaskDelayUntil(&taskWakeTime, POLL_RATE / portTICK_PERIOD_MS);
+            continue;
+        }
+
         BM1370_read_registers();
         ESP_LOGD(TAG, "Sent register read commands");
 
