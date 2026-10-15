@@ -87,7 +87,7 @@ else()
         SOURCE_DIR ${WEB_SRC_DIR}
         DOWNLOAD_COMMAND ""
         CONFIGURE_COMMAND
-            ${NPM_EXECUTABLE}  i
+            ${NPM_EXECUTABLE} ci
         USES_TERMINAL_BUILD true
         BUILD_COMMAND
             ${NPM_EXECUTABLE} run build
