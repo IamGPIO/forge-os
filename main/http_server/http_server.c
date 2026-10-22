@@ -762,17 +762,6 @@ static esp_err_t PATCH_update_settings(httpd_req_t * req)
     if ((item = cJSON_GetObjectItem(root, "overclockEnabled")) != NULL) {
         nvs_config_set_u16(NVS_CONFIG_OVERCLOCK_ENABLED, item->valueint);
     }
-    if (cJSON_IsNumber(item = cJSON_GetObjectItem(root, "powerCalibration"))) {
-        // Multiplier for the INA260 power/current readings (1.0 = none), e.g. reference watts / displayed watts.
-        int milli = (int) (item->valuedouble * 1000.0 + 0.5);
-        if (milli < POWER_CAL_MIN_MILLI) {
-            milli = POWER_CAL_MIN_MILLI;
-        }
-        if (milli > POWER_CAL_MAX_MILLI) {
-            milli = POWER_CAL_MAX_MILLI;
-        }
-        nvs_config_set_u16(NVS_CONFIG_POWER_CAL, (uint16_t) milli);
-    }
     if ((item = cJSON_GetObjectItem(root, "poolMode")) != NULL) {
         nvs_config_set_u16(NVS_CONFIG_POOL_MODE, item->valueint ? POOL_MODE_DUAL : POOL_MODE_FALLBACK);
     }
@@ -1068,7 +1057,6 @@ static esp_err_t GET_system_info(httpd_req_t * req)
     cJSON_AddNumberToObject(root, "power", GLOBAL_STATE->POWER_MANAGEMENT_MODULE.power);
     cJSON_AddNumberToObject(root, "voltage", GLOBAL_STATE->POWER_MANAGEMENT_MODULE.voltage);
     cJSON_AddNumberToObject(root, "current", Power_get_current(GLOBAL_STATE));
-    cJSON_AddNumberToObject(root, "powerCalibration", Power_get_calibration_milli() / 1000.0);
     cJSON_AddNumberToObject(root, "temp", GLOBAL_STATE->POWER_MANAGEMENT_MODULE.chip_temp_avg);
     cJSON_AddNumberToObject(root, "vrTemp", GLOBAL_STATE->POWER_MANAGEMENT_MODULE.vr_temp);
     cJSON_AddNumberToObject(root, "maxPower", Power_get_max_settings(GLOBAL_STATE));
