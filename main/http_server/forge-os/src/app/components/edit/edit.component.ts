@@ -114,6 +114,7 @@ export class EditComponent implements OnInit, OnDestroy {
         this.form = this.fb.group({
           coreVoltage: [info.coreVoltage, [Validators.required]],
           frequency: [info.frequency, [Validators.required]],
+          powerCalibration: [info.powerCalibration ?? 1, [Validators.required, Validators.min(0.5), Validators.max(1.5)]],
           autofanspeed: [info.autofanspeed == 1, [Validators.required]],
           manualFanSpeed: [info.manualFanSpeed, [Validators.required]],
           overheat_mode: [info.overheat_mode, [Validators.required]]
