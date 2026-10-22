@@ -430,6 +430,20 @@ esp_netif_t * wifi_init_softap(void)
 {
     esp_netif_t * esp_netif_ap = esp_netif_create_default_wifi_ap();
 
+    // Move the setup hotspot off 192.168.4.1 so it never collides with a
+    // 192.168.4.x home gateway that the station also uses as its DNS server.
+    // Otherwise the station's own pool DNS lookups loop back to this captive
+    // DNS and every pool looks unreachable until the setup AP times out.
+    {
+        esp_netif_ip_info_t _ap_ip = {0};
+        esp_netif_str_to_ip4("192.168.20.1", &_ap_ip.ip);
+        esp_netif_str_to_ip4("192.168.20.1", &_ap_ip.gw);
+        esp_netif_str_to_ip4("255.255.255.0", &_ap_ip.netmask);
+        esp_netif_dhcps_stop(esp_netif_ap);
+        esp_netif_set_ip_info(esp_netif_ap, &_ap_ip);
+        esp_netif_dhcps_start(esp_netif_ap);
+    }
+
     // Define a buffer for the SSID
     char ssid_with_mac[13]; // "Nano" + 4 bytes from MAC address
 
