@@ -44,6 +44,7 @@
 #define NVS_CONFIG_OVERCLOCK_ENABLED "oc_enabled"
 #define NVS_CONFIG_LED_BLINK "ledblink"
 #define NVS_CONFIG_SWARM "swarmconfig"
+#define NVS_CONFIG_POWER_CAL "powercal"
 
 char * nvs_config_get_string(const char * key, const char * default_value);
 void nvs_config_set_string(const char * key, const char * default_value);
