@@ -10,7 +10,6 @@ SRCS
     "work_queue.c"
     "./NvsManager/src/nvs_device.c"
     "./http_server/http_server.c"
-    "./http_server/handler_ota_github.c"
     "./self_test/self_test.c"
     "./tasks/stratum_task.c"
     "./tasks/stratum_v2_client.c"

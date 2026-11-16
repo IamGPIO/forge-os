@@ -1,4 +1,4 @@
-import { HttpClient, HttpEvent } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { catchError, delay, distinctUntilChanged, EMPTY, exhaustMap, fromEvent, map, Observable, of, shareReplay, startWith, switchMap, timer } from 'rxjs';
 import { eASICModel } from 'src/models/enum/eASICModel';
@@ -140,52 +140,6 @@ export class SystemService {
     return this.httpClient.patch(`${uri}/api/system`, update);
   }
 
-
-  private otaUpdate(file: File | Blob, url: string) {
-    return new Observable<HttpEvent<string>>((subscriber) => {
-      const reader = new FileReader();
-
-      reader.onload = (event: any) => {
-        const fileContent = event.target.result;
-
-        return this.httpClient.post(url, fileContent, {
-          reportProgress: true,
-          observe: 'events',
-          responseType: 'text', // Specify the response type
-          headers: {
-            'Content-Type': 'application/octet-stream', // Set the content type
-          },
-        }).subscribe({
-          next: (event) => {
-            subscriber.next(event);
-          },
-          error: (err) => {
-            subscriber.error(err)
-          },
-          complete: () => {
-            subscriber.complete();
-          }
-        });
-      };
-      reader.readAsArrayBuffer(file);
-    });
-  }
-
-  public performOTAUpdate(file: File | Blob) {
-    return this.otaUpdate(file, `/api/system/OTA`);
-  }
-  public performWWWOTAUpdate(file: File | Blob) {
-    return this.otaUpdate(file, `/api/system/OTAWWW`);
-  }
-
-
-  public startGithubOTA(fwUrl: string, wwwUrl: string): Observable<any> {
-    return this.httpClient.post('/api/system/OTA/github', { fw_url: fwUrl, www_url: wwwUrl });
-  }
-
-  public getGithubOTAStatus(): Observable<any> {
-    return this.httpClient.get('/api/system/OTA/github');
-  }
 
   public getSwarmInfo(uri: string = ''): Observable<{ ip: string }[]> {
     return this.httpClient.get(`${uri}/api/swarm/info`) as Observable<{ ip: string }[]>;
